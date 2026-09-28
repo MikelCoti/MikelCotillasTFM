@@ -61,7 +61,7 @@ Permite analizar los resultados:
 ## Estructura principal
 
 ```text
-├── Executive_Summary.py
+├── dashboard.py
 ├── pages/
 │   ├── 1_Inventory_Simulation.py
 │   └── 2_Business_Analysis.py
@@ -104,7 +104,7 @@ python src/calibrate_demand_distribution.py
 Ejecutar el dashboard:
 
 ```bash
-streamlit run Executive_Summary.py
+streamlit run dashboard.py
 ```
 
 ## Dataset
