@@ -1,102 +1,131 @@
-# Retail Inventory Risk Intelligence — consolidated MVP
+# Retail Inventory Risk con Geometric Deep Learning
 
-This project uses M5 historical **observed sales** to train a seven-day LightGBM baseline and construct an early-history product-store graph. Inventory and current stockout probabilities are simulated; neither actual inventory levels nor verified historical stockout labels are in M5.
+Proyecto de **Data Science aplicado a gestión de inventario** desarrollado como parte de un Trabajo de Fin de Máster.
 
-## Input data
+El objetivo es analizar si el uso de **Geometric Deep Learning (GDL)** puede mejorar la previsión de demanda y ayudar a tomar mejores decisiones de reposición de inventario.
 
-Download the M5 Forecasting - Accuracy evaluation files and place these in `data/raw/`:
+## Descripción
 
-- `sales_train_evaluation.csv`
-- `calendar.csv`
-- `sell_prices.csv`
+La aplicación utiliza datos del dataset **Walmart M5** para generar previsiones de demanda a 7 días por producto y tienda.
 
-## Run
+Se comparan distintos enfoques:
 
-Install Python dependencies from `requirements.txt` in your virtual environment. From the project root, execute **in order**:
+- **LightGBM** como modelo base.
+- Red neuronal sin conexiones entre productos.
+- **GraphSAGE** utilizando relaciones entre el mismo producto en distintas tiendas.
+- GraphSAGE utilizando similitud entre productos.
+- Un modelo GraphSAGE que combina ambos tipos de relaciones.
+
+Las previsiones se utilizan posteriormente en una **simulación de inventario** para analizar métricas como:
+
+- Nivel de servicio / fill rate.
+- Demanda no satisfecha.
+- Días con rotura de stock.
+- Gasto de reposición.
+- Inventario medio.
+- Contribución financiera simulada.
+
+## Dashboard
+
+El proyecto incluye una aplicación desarrollada con **Streamlit** con tres áreas principales:
+
+### Executive Summary
+
+Permite identificar productos con mayor riesgo estimado de rotura de stock, consultar previsiones de demanda y realizar simulaciones sencillas de reposición.
+
+El riesgo se calcula utilizando una distribución binomial negativa cuya dispersión se calibra con los errores históricos de las previsiones.
+
+### Inventory Simulation
+
+Permite comparar los distintos modelos de forecasting bajo diferentes restricciones de presupuesto de compras.
+
+### Business Analysis
+
+Permite analizar los resultados:
+
+- Por categoría: **FOODS, HOUSEHOLD y HOBBIES**.
+- Por producto y tienda.
+- Bajo diferentes presupuestos, lead times y niveles de stock de seguridad.
+
+## Tecnologías utilizadas
+
+- Python
+- Pandas
+- NumPy
+- LightGBM
+- PyTorch
+- PyTorch Geometric
+- SciPy
+- Streamlit
+
+## Estructura principal
+
+```text
+├── Executive_Summary.py
+├── pages/
+│   ├── 1_Inventory_Simulation.py
+│   └── 2_Business_Analysis.py
+├── src/
+│   ├── prepare_data.py
+│   ├── build_graph.py
+│   ├── train_model.py
+│   ├── train_graphsage.py
+│   ├── run_graph_ablation.py
+│   ├── simulate_inventory.py
+│   ├── analyze_inventory.py
+│   └── calibrate_demand_distribution.py
+├── tests/
+└── outputs/
+```
+
+## Ejecución
+
+Instalar las dependencias:
+
+```bash
+pip install -r requirements.txt
+```
+
+Preparar los datos y entrenar los modelos:
 
 ```bash
 python src/prepare_data.py
 python src/build_graph.py
 python src/train_model.py
 python src/train_graphsage.py
-python src/evaluate_backtest.py
-python src/analyze_forecasts.py
-streamlit run app.py
 ```
 
-`src/config.py` holds the single source of truth for dates and product selection. The prepared panel starts at d_1370 (conventional lag_28 needs history back to d_1342); graph similarity uses d_1370–d_1549; training starts d_1550. The selected 200 FOODS_3 products across CA_1, CA_2 and TX_1 yield 600 product-store nodes. GraphSAGE training is implemented in `src/train_graphsage.py`. It saves a separate historical backtest and an optional app-compatible forecast file without replacing LightGBM dashboard predictions.
-
-**Important:** `outputs/predictions.csv` contains the last historical *test* cutoff for demonstration, not a live forward forecast. The test partition has already been examined in earlier exploratory work; evaluate candidate graph architectures on validation rather than repeatedly using this test period for selection.
-
-## GraphSAGE outputs
-
-- `models/graphsage_7d.pt`: validation-selected model weights and training-fitted preprocessing metadata.
-- `outputs/graphsage_training_history.csv`: loss and validation metrics by epoch.
-- `outputs/graphsage_backtest_predictions.csv`: historical GNN test forecasts.
-- `outputs/backtest_predictions_with_graphsage.csv`: aligned LightGBM, seasonal naive and GraphSAGE forecasts; `evaluate_backtest.py` detects this file automatically.
-- `outputs/predictions_graphsage.csv`: same simulated inventory and prices as the LightGBM dashboard, with GNN point forecasts; `app.py` continues to use `outputs/predictions.csv` until a model selector is added.
-
-GraphSAGE uses a point prediction, not a calibrated demand distribution. The provisional negative-binomial risk distribution remains an illustrative assumption.
-
-## Milestone 4: historical inventory simulation
-
-Run **after** `python src/train_model.py` and
-`python src/run_graph_ablation.py --phase test --configs node_only cross_store product_similarity full --seeds 42 43 44`.
-The simulator loads real test-period **forecast exports**, not model checkpoints;
-no training is performed during inventory simulation.
+Calibrar la distribución utilizada para estimar el riesgo:
 
 ```bash
-# First establish what happens without a purchasing budget constraint:
-python src/simulate_inventory.py --seeds 42 --output-dir outputs/inventory_unconstrained
-
-# Compare all models under the SAME hypothetical weekly purchasing budget:
-python src/simulate_inventory.py --seeds 42 --weekly-budget 20000
-
-# View the original dashboard and the new Inventory Simulation page:
-streamlit run app.py
+python src/calibrate_demand_distribution.py
 ```
 
-You can adjust `--lead-days` (1–7), `--safety-days`, `--initial-cover-weeks`,
-`--weekly-budget`, `--cost-ratio`, `--holding-rate` and `--order-fee`.
-The default selected models are seasonal naive, LightGBM, node-only,
-cross-store GraphSAGE, and full GraphSAGE. Add `product_similarity` with
-`--models ...` if you wish to compare that configuration too. The default seed
-42 is a single GraphSAGE model per configuration; specifying three seeds
-averages their forecasts and **changes the evaluation into an ensemble**.
-
-`outputs/inventory/` contains `inventory_summary.csv`, `inventory_weekly.csv`,
-`inventory_products.csv`, `inventory_daily.csv`, and `simulation_config.json`.
-The new Streamlit page reads only `outputs/inventory/`.
-
-**Interpretation:** Decisions are made at d_1899, d_1906, d_1913, d_1920,
-d_1927 and d_1934; subsequent historical M5 unit sales from d_1900 through
-d_1941 serve as an imperfect **demand proxy**. The simulator uses the raw M5
-sales file to obtain the final seven days, which are absent from the forecasting
-cutoff panel. Sales may be censored by Walmart's actual stock availability.
-Simulated inventory is not fed back into historical model features (an open-loop
-policy replay). Weekly forecasts are extrapolated at a constant daily demand
-rate across the supplier lead time, review period and safety allowance.
-Economic outputs use *frozen pre-test prices* and assumed costs; neither actual
-inventory, historical stockouts, suppliers, nor real profitability are observed.
-Our original M5 test period has been inspected previously, so these are
-**exploratory historical results**, not prospective operational validation.
-
-Test the logic with a small synthetic two-SKU M5-shaped dataset:
+Ejecutar el dashboard:
 
 ```bash
-python -m unittest discover -s tests -p 'test_inventory_simulation.py' -v
+streamlit run Executive_Summary.py
 ```
 
-## Milestone 5: budget scenarios and business dashboard
+## Dataset
 
-See [README_MILESTONE5.md](README_MILESTONE5.md) for generation of the four
-scenario folders, inventory accounting checks and the extended Streamlit
-page. The original risk dashboard is unchanged.
+El proyecto utiliza el dataset público **M5 Forecasting - Accuracy**, basado en datos históricos de ventas de Walmart.
 
-## Expanded three-category edition
+Los archivos originales del dataset no se incluyen en este repositorio debido a su tamaño.
 
-**This copy** is configured for 200 items from each of FOODS, HOUSEHOLD and HOBBIES
-in CA_1, CA_2 and TX_1. See [README_MULTICATEGORY.md](README_MULTICATEGORY.md)
-for the full sequence and instructions for preserving the earlier FOODS_3-only
-experiment. The older single-category figure of 600 nodes in the text above
-applies to the archived edition, not this expanded configuration.
+## Limitaciones
+
+Este proyecto es un **MVP de apoyo a decisiones**, no un sistema operativo de gestión de inventario.
+
+El dataset M5 contiene ventas históricas, pero no proporciona inventario real ni etiquetas fiables de roturas de stock. Por este motivo:
+
+- El inventario utilizado en la aplicación es simulado.
+- Los costes y presupuestos son supuestos experimentales.
+- Las métricas financieras son estimaciones simuladas.
+- Las probabilidades de riesgo representan incertidumbre sobre la demanda observada, no probabilidades verificadas de rotura de stock real.
+
+## Conclusión
+
+El proyecto muestra cómo combinar **forecasting, redes neuronales sobre grafos y simulación de inventario** para evaluar no solo la precisión predictiva de un modelo, sino también su posible impacto sobre decisiones de negocio.
+
+Uno de los principales resultados del proyecto es que **una previsión más precisa no implica necesariamente una mejor decisión de inventario**, lo que demuestra la importancia de evaluar los modelos de Data Science también desde una perspectiva operativa.
