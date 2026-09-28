@@ -1,0 +1,32 @@
+# Python environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# IDE
+.vscode/
+.idea/
+
+# Secrets
+.env
+*.env
+.streamlit/secrets.toml
+
+# Raw / processed datasets
+data/raw/
+data/processed/
+
+# Trained models
+models/
+
+# Large generated outputs
+outputs/inventory_*/
+outputs/ablation/
+
+# Temporary files
+*.log
+.DS_Store
+Thumbs.db
